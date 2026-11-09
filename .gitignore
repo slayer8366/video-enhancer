@@ -1,0 +1,11 @@
+.gradle/
+build/
+/local.properties
+/.model-cache/
+/.idea/
+*.iml
+.DS_Store
+/captures/
+.kotlin/
+__pycache__/
+*.pyc

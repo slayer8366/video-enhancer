@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Four small squares growing into one large one: upscaling. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#FFFFFF" android:pathData="M30,30h10v10h-10z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M42,30h10v10h-10z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M30,42h10v10h-10z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M42,42h10v10h-10z" />
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFF" android:strokeWidth="4"
+        android:pathData="M58,58h20v20h-20z" />
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFF" android:strokeWidth="3"
+        android:pathData="M53,53L60,60" />
+</vector>
