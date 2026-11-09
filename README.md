@@ -71,10 +71,19 @@ release APKs, checks 16 KB page alignment, prints the signing certificate, and u
 **release APK** as an artifact named `video-enhancer-release-<run number>`, kept for 5 days.
 Download it from the run's Summary page, unzip, and `adb install -r app-release.apk`.
 
-Signing: Android only updates an app signed with the same key. CI reuses one debug keystore kept
-in the Actions cache, which GitHub evicts after 7 days without use. For a permanent key, store one
-as the repository secret `DEBUG_KEYSTORE_B64` (`base64 -w0 ~/.android/debug.keystore`); the
-workflow prefers it when present. If the key ever changes, uninstall the app before installing.
+Signing: Android only updates an app signed with the same key. CI signs the release APK with a
+keystore kept in the Actions cache, created on the first run. GitHub evicts caches unused for 7
+days, so for a permanent key create one and store it as the repository secret
+`SIGNING_KEYSTORE_B64`; the workflow prefers it when present:
+
+```
+keytool -genkeypair -keystore release.jks -alias enhancer -storepass android -keypass android \
+  -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Video Enhancer"
+base64 -w0 release.jks    # paste the output as the secret value
+```
+
+The run log prints the signing certificate's SHA-256. If it changes between two builds, uninstall
+the app before installing the newer one.
 
 ## How it works
 

@@ -25,11 +25,25 @@ android {
         buildConfigField("String", "LITERT_VERSION", "\"${libs.versions.litert.get()}\"")
     }
 
+    // Personal-use build: release is sideloaded, never uploaded to Play. CI passes a stable
+    // keystore through SIGNING_* env vars so every CI build can update the installed app;
+    // local builds without them fall back to the machine's debug key.
+    val ciKeystore = providers.environmentVariable("SIGNING_KEYSTORE").orNull
+    signingConfigs {
+        if (ciKeystore != null) {
+            create("sideload") {
+                storeFile = file(ciKeystore)
+                storePassword = providers.environmentVariable("SIGNING_PASSWORD").getOrElse("android")
+                keyAlias = providers.environmentVariable("SIGNING_KEY_ALIAS").getOrElse("enhancer")
+                keyPassword = providers.environmentVariable("SIGNING_PASSWORD").getOrElse("android")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Personal-use build: sign release with the debug key so it can be sideloaded.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (ciKeystore != null) "sideload" else "debug")
         }
     }
 

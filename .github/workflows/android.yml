@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      HAS_KEYSTORE_SECRET: ${{ secrets.DEBUG_KEYSTORE_B64 != '' }}
+      HAS_KEYSTORE_SECRET: ${{ secrets.SIGNING_KEYSTORE_B64 != '' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -48,20 +48,32 @@ jobs:
           path: .model-cache
           key: models-${{ hashFiles('app/build.gradle.kts') }}
 
-      # Android only installs an update signed with the same key. Use the
-      # DEBUG_KEYSTORE_B64 secret if set (permanent); otherwise reuse a key kept
-      # in the Actions cache (lost if the cache goes unused for 7 days).
+      # Android only installs an update signed with the same key. The release APK is
+      # signed with .ci-keystore/release.jks: from the SIGNING_KEYSTORE_B64 secret if set
+      # (permanent), otherwise from the Actions cache, otherwise newly generated and
+      # cached (evicted if unused for 7 days). Paths are explicit so nothing depends on
+      # where AGP keeps its own debug key.
       - name: Restore signing key from secret
         if: env.HAS_KEYSTORE_SECRET == 'true'
         env:
-          KEYSTORE_B64: ${{ secrets.DEBUG_KEYSTORE_B64 }}
-        run: mkdir -p ~/.android && echo "$KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore
+          KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
+        run: mkdir -p .ci-keystore && echo "$KEYSTORE_B64" | base64 -d > .ci-keystore/release.jks
       - name: Restore signing key from cache
         if: env.HAS_KEYSTORE_SECRET != 'true'
         uses: actions/cache@v6
         with:
-          path: ~/.android/debug.keystore
-          key: debug-keystore-v1
+          path: .ci-keystore/release.jks
+          key: signing-keystore-v1
+      - name: Create signing key if missing
+        run: |
+          if [ ! -f .ci-keystore/release.jks ]; then
+            mkdir -p .ci-keystore
+            keytool -genkeypair -keystore .ci-keystore/release.jks -alias enhancer \
+              -storepass android -keypass android -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Video Enhancer CI" -noprompt
+            echo "Generated a new signing key (no secret and no cached key)."
+          fi
+          echo "SIGNING_KEYSTORE=$GITHUB_WORKSPACE/.ci-keystore/release.jks" >> "$GITHUB_ENV"
 
       - name: Unit tests and lint
         run: ./gradlew :app:testDebugUnitTest :app:lintDebug

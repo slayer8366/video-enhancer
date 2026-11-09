@@ -9,3 +9,4 @@ build/
 .kotlin/
 __pycache__/
 *.pyc
+/.ci-keystore/
