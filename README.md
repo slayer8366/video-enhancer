@@ -63,6 +63,19 @@ The model archives are cached in `.model-cache/` (git-ignored). To build offline
 zips listed in `app/build.gradle.kts` there; the hash check still applies. A `release` build is
 signed with the debug key so it can be sideloaded.
 
+## CI
+
+`.github/workflows/android.yml` runs on every push (except docs-only changes), on pull requests
+and on demand (Actions tab, "Run workflow"). It runs the unit tests and Lint, builds debug and
+release APKs, checks 16 KB page alignment, prints the signing certificate, and uploads the
+**release APK** as an artifact named `video-enhancer-release-<run number>`, kept for 5 days.
+Download it from the run's Summary page, unzip, and `adb install -r app-release.apk`.
+
+Signing: Android only updates an app signed with the same key. CI reuses one debug keystore kept
+in the Actions cache, which GitHub evicts after 7 days without use. For a permanent key, store one
+as the repository secret `DEBUG_KEYSTORE_B64` (`base64 -w0 ~/.android/debug.keystore`); the
+workflow prefers it when present. If the key ever changes, uninstall the app before installing.
+
 ## How it works
 
 ```

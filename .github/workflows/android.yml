@@ -1,0 +1,100 @@
+name: Android CI
+
+on:
+  push:
+    branches: ['**']
+    paths-ignore: ['docs/**', '**/*.md', 'tools/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      HAS_KEYSTORE_SECRET: ${{ secrets.DEBUG_KEYSTORE_B64 != '' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # 'basic' is the open-source provider built on actions/cache. The default
+      # ('enhanced') is a proprietary service, only in free preview for private repos.
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      - name: Install Android SDK packages
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null
+          "$SDKM" "platforms;android-37.0" "build-tools;36.0.0" > /dev/null
+          ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools"
+
+      # Model archives (~68 MB) are downloaded and SHA-256 checked by the build.
+      - name: Cache model archives
+        uses: actions/cache@v6
+        with:
+          path: .model-cache
+          key: models-${{ hashFiles('app/build.gradle.kts') }}
+
+      # Android only installs an update signed with the same key. Use the
+      # DEBUG_KEYSTORE_B64 secret if set (permanent); otherwise reuse a key kept
+      # in the Actions cache (lost if the cache goes unused for 7 days).
+      - name: Restore signing key from secret
+        if: env.HAS_KEYSTORE_SECRET == 'true'
+        env:
+          KEYSTORE_B64: ${{ secrets.DEBUG_KEYSTORE_B64 }}
+        run: mkdir -p ~/.android && echo "$KEYSTORE_B64" | base64 -d > ~/.android/debug.keystore
+      - name: Restore signing key from cache
+        if: env.HAS_KEYSTORE_SECRET != 'true'
+        uses: actions/cache@v6
+        with:
+          path: ~/.android/debug.keystore
+          key: debug-keystore-v1
+
+      - name: Unit tests and lint
+        run: ./gradlew :app:testDebugUnitTest :app:lintDebug
+
+      - name: Build APKs
+        run: ./gradlew :app:assembleDebug :app:assembleRelease
+
+      - name: Check 16 KB page alignment
+        run: |
+          for apk in app/build/outputs/apk/*/*.apk; do
+            "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 "$apk"
+            echo "$apk: aligned, $(du -h "$apk" | cut -f1)"
+          done
+          echo "Signing certificate SHA-256:"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk | grep SHA-256
+
+      # Release APK only: it is the one to install, and private repos have a
+      # small artifact storage quota (each APK is ~125 MB).
+      - name: Upload release APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: video-enhancer-release-${{ github.run_number }}
+          path: app/build/outputs/apk/release/app-release.apk
+          compression-level: 0
+          retention-days: 5
+          if-no-files-found: error
+
+      - name: Upload test and lint reports
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reports-${{ github.run_number }}
+          path: |
+            app/build/reports/
+            app/build/test-results/
+          retention-days: 5
