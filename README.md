@@ -80,7 +80,7 @@ Design choices and the evidence behind them:
 | Choice | Why |
 |---|---|
 | LiteRT 2.3.2 `CompiledModel` | In 2.x the GPU path is `CompiledModel` + `Accelerator.GPU`; `litert-gpu` ships only the native accelerator. GPU and CPU are compiled separately so the reported backend is the real one. |
-| Per-model tile overlap | Measured: QuickSRNet needs 12 px for zero seam difference, Real-ESRGAN v3 24 px for at most one 8-bit level. Adjustable in Lab. |
+| Per-model tile overlap | Measured two ways (difference from a wide-overlap reference, and a shifted-tiling seam test with controls): QuickSRNet 12 px and Real-ESRGAN v3 24 px leave no measurable seam; x4plus keeps a 2-5% residual at 32 px. Adjustable in Lab. |
 | Region decode + streaming PNG | Output resolution is not capped by the Java heap. |
 | EXIF orientation by pixel remap | Region decoders ignore EXIF. The remap is unit-tested for all eight orientations and cross-checked against Pillow. |
 | sRGB decode | Inputs are converted to sRGB before upscaling. Wide-gamut (Display P3) colours are clipped. Recorded as a limitation. |
@@ -95,6 +95,8 @@ Design choices and the evidence behind them:
 - HDR (PQ/HLG) and 10-bit video are refused with a message rather than tone-mapped.
 - Wide-gamut photos are converted to sRGB; Ultra HDR gain maps are ignored (SDR base image only).
 - Transparency is flattened onto white (the models are RGB-only).
+- Real-ESRGAN x4plus can show faint tile seams in smooth areas (see docs/MODELS.md). Feathered
+  blending or a larger-input export would fix it.
 - Jobs live in memory; if Android kills the process, queued jobs are lost and the partial output
   may remain as a hidden, pending MediaStore entry.
 - No NPU path. LiteRT 2.x supports NPUs through vendor plugins delivered separately; not wired up.

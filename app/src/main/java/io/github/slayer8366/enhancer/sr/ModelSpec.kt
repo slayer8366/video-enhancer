@@ -13,9 +13,9 @@ enum class ModelKind(val label: String) {
  * metadata.json and with the LiteRT interpreter): input [1,128,128,3] float32 RGB
  * in [0,1], output [1,512,512,3] in [0,1].
  *
- * [defaultPad] is the tile overlap chosen from the seam measurement in
- * docs/MODELS.md: the smallest overlap whose largest deviation from a 40 px
- * reference was at most one 8-bit level (zero for QuickSRNet).
+ * [defaultPad] is the tile overlap chosen from the seam measurements in
+ * docs/MODELS.md: QuickSRNet and General v3 use the smallest overlap with no
+ * measurable seam; x4plus never fully converges and uses 32 px.
  */
 data class ModelSpec(
     val id: String,
@@ -71,11 +71,12 @@ object Models {
         name = "Real-ESRGAN x4plus (Max)",
         kind = ModelKind.PERCEPTUAL,
         params = "16.7M params",
-        defaultPad = 24,
+        defaultPad = 32,
         summary = "The full RRDB Real-ESRGAN. Highest perceptual quality, roughly 11x the compute " +
             "of General v3 per Qualcomm's own NPU timings.",
-        caveat = "Same hallucination caveat as General v3. Very wide receptive field: at 24 px tile " +
-            "overlap the seam residual was mean 0.03, max 4.1 levels of 255.",
+        caveat = "Same hallucination caveat as General v3. Its receptive field is wider than a 128 px tile, " +
+            "so output depends slightly on tiling: at 32 px overlap, steps across tile boundaries " +
+            "measured 2-5% above normal (faint seams possible in smooth areas).",
         source = "Qualcomm AI Hub Models v0.66.0 (Real-ESRGAN, arXiv:2107.10833)",
         license = "BSD-3-Clause",
     )

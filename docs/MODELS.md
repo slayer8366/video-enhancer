@@ -9,7 +9,7 @@ not measured. Measurements were made on 2026-11-09 with the scripts in `tools/sr
 |---|---|---|---|---|---|
 | QuickSRNet Large | Fidelity (L1-trained) | 436K | 12 px | QuickSRNet, arXiv:2303.04336 | BSD-3-Clause (AIMET Model Zoo) |
 | Real-ESRGAN General v3 | Perceptual (GAN) | 1.21M | 24 px | Real-ESRGAN, arXiv:2107.10833 | BSD-3-Clause |
-| Real-ESRGAN x4plus ("Max") | Perceptual (GAN) | 16.7M | 24 px | Real-ESRGAN, arXiv:2107.10833 | BSD-3-Clause |
+| Real-ESRGAN x4plus ("Max") | Perceptual (GAN) | 16.7M | 32 px | Real-ESRGAN, arXiv:2107.10833 | BSD-3-Clause |
 
 All three files are the "universal" TFLite float32 exports from Qualcomm AI Hub Models v0.66.0
 (Hugging Face `qualcomm/QuickSRNetLarge`, `qualcomm/Real-ESRGAN-General-x4v3`,
@@ -54,6 +54,10 @@ published for bicubic 4x.
 | SESR-M5 | 26.58 / 0.7173 | 24.50 / 0.6142 |
 | Real-ESRGAN General v3 | 24.60 / **0.7527** | 23.08 / **0.6274** |
 
+All rows used 8 px tile overlap. Rerunning the shipped QuickSRNet at 12 px and Real-ESRGAN v3 at
+24 px (their app defaults) gave identical PSNR to 2 decimals and SSIM to 4 decimals, because these
+LR images are small and few pixels sit near a tile boundary.
+
 \* Timing column: one x86 cloud VM, 4 threads, XNNPACK. Useful only for relative cost between
 models. Phone numbers come from the in-app Lab benchmark.
 
@@ -78,10 +82,10 @@ models. Phone numbers come from the in-app Lab benchmark.
 The models take a fixed 128x128 input, so large images are processed in tiles. Each tile carries
 extra context ("overlap") that is cropped away. Too little overlap leaves visible seams.
 
-Method (`seams.py`): upscale 256x256 crops of Set14 HR images with different overlaps and compare
-each result with a 40 px-overlap reference. Every crop spans at least 3x3 tiles. Differences are
-on the 0-255 scale. Rule for the default: the smallest overlap whose maximum difference is at most
-one 8-bit level.
+Two measurements, both on crops of Set14 HR images so every crop spans at least 3x3 tiles.
+
+**1. Difference from a wide-overlap reference** (`seams.py`). Upscale 256x256 crops with
+different overlaps and compare each result with a 40 px-overlap reference, on the 0-255 scale.
 
 | Model | Overlap | Compute cost | Mean diff | 99.9th pct | Max |
 |---|---|---|---|---|---|
@@ -92,17 +96,47 @@ one 8-bit level.
 | Real-ESRGAN v3 | 16 px | 1.78x | 0.0267 | 1.81 | 7.3 |
 | Real-ESRGAN v3 | **24 px** | 2.56x | 0.0015 | 0.15 | 1.0 |
 | Real-ESRGAN v3 | 32 px | 4.00x | 0 | 0 | 0 |
-| Real-ESRGAN x4plus | 24 px | 2.56x | pending | pending | pending |
+| Real-ESRGAN x4plus | 0 px | 1.00x | 2.1250 | 65.29 | 191.7 |
+| Real-ESRGAN x4plus | 8 px | 1.31x | 1.4623 | 39.10 | 132.7 |
+| Real-ESRGAN x4plus | 16 px | 1.78x | 1.0271 | 25.34 | 99.3 |
+| Real-ESRGAN x4plus | 24 px | 2.56x | 0.6370 | 20.89 | 73.9 |
+| Real-ESRGAN x4plus | 32 px | 4.00x | 0.6992 | 18.77 | 106.7 |
 
-x4plus re-measurement with the corrected method is pending (see correction note below).
+x4plus: 2 crops. It does not converge: its 23 RRDB blocks give it a receptive field far wider
+than a 128 px tile can carry, so different tilings synthesise visibly different texture in places.
+
+**2. Are boundaries visible?** (`seam_visibility.py`). Upscale each 320x320 crop twice, the
+second time shifted by half a tile core, so the first tiling's boundaries fall mid-tile in the
+second. At those positions, compare the step between neighbouring pixels in the two results.
+Same content, only one has a boundary there, so the ratio is 1.000 when tiling leaves no trace.
+Controls: QuickSRNet at 12 px gives exactly 1.000 (its output is tiling-independent), and every
+model at 0 px gives about 2, so the test detects seams when they exist.
+
+| Model | Overlap | Boundary step ratio (3 crops) |
+|---|---|---|
+| QuickSRNet Large | 0 px | 2.02, 1.90, 2.01 |
+| QuickSRNet Large | **12 px** | 1.000, 1.000, 1.000 |
+| Real-ESRGAN v3 | 0 px | 2.76, 1.98, 2.34 |
+| Real-ESRGAN v3 | **24 px** | 1.001, 1.001, 1.000 |
+| Real-ESRGAN v3 | 32 px | 1.000, 1.000, 1.000 |
+| Real-ESRGAN x4plus | 0 px | 2.38, 1.99, 2.07 |
+| Real-ESRGAN x4plus | 24 px | 1.065, 1.049, 1.108 |
+| Real-ESRGAN x4plus | **32 px** | 1.027, 1.046, 1.023 |
+
+**Defaults (bold):** QuickSRNet 12 px and v3 24 px leave no measurable seam. x4plus keeps a
+residual of 2-5% at 32 px, which may show as faint lines in smooth areas, so its default is
+32 px (4.0x compute) and the residual is stated in the app. Removing it needs either feathered
+blending of overlaps or an export with a larger input than 128 px. Neither is done yet.
 QuickSRNet and v3: 4 crops. Zero difference at 12 px (QuickSRNet) and 32 px (v3) means the
 tiled result is identical to the reference, which is what you expect once the overlap covers the
-network's receptive field.
+network's receptive field. A large difference from the reference is not the same as a visible
+seam, which is why the second measurement exists.
 
 **Correction.** A first pass used Set14 *LR* images as input. Most of those are 128 px or
 smaller, so they ran as a single tile and contributed zeros, and only one image actually had
-seams. That pass reported "exact" at 8 px (QuickSRNet) and 16 px (v3) and underestimated the
-x4plus means. The table above replaces it, and the defaults in the app were raised to match.
+seams. That pass reported "exact" at 8 px (QuickSRNet) and 16 px (v3) and a small residual for x4plus
+at 24 px (max 4.1). All three were wrong. The tables above replace it, and the defaults in the
+app were raised from 8/16/24 px to 12/24/32 px.
 
 The Kotlin tiler is unit-tested against the Python reference (identical spans), and against a
 fake model with a known receptive field: with enough overlap, tiled output equals whole-image
@@ -125,7 +159,8 @@ numbers, and the Detail screen will estimate from them.
 ```
 pip install ai-edge-litert numpy pillow
 python -I tools/sr_reference/bench.py MODELS_DIR DATA_DIR
-python -I tools/sr_reference/seams.py MODEL.tflite DATA_DIR 224
+python -I tools/sr_reference/seams.py MODEL.tflite DATA_DIR 256 4
+python -I tools/sr_reference/seam_visibility.py MODEL.tflite DATA_DIR 0 12 24 32
 ```
 
 `MODELS_DIR` holds one folder per extracted model archive (see `.model-cache/` after a build).

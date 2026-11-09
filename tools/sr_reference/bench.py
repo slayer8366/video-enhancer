@@ -1,6 +1,6 @@
 """PSNR/SSIM of each model on Set5/Set14 (4x), clean and JPEG-degraded input.
 
-Usage: python -I bench.py MODELS_DIR DATA_DIR
+Usage: python -I bench.py MODELS_DIR DATA_DIR [PAD]
   MODELS_DIR holds one folder per model with a .tflite inside (the extracted
              Qualcomm AI Hub zips, or the app's .model-cache archives unzipped).
   DATA_DIR   holds Set5/{HR,LR_x4}/... and Set14/{HR,LR_x4}/... from the
@@ -31,7 +31,7 @@ def evaluate(fn, pairs):
     return float(np.mean(ps)), float(np.mean(ss))
 
 
-def main(mdir, ddir):
+def main(mdir, ddir, pad=PAD):
     models = {os.path.basename(p)[:-7]: p for p in glob.glob(mdir + '/*/*.tflite')}
     results = {}
     for ds in ('Set5', 'Set14'):
@@ -44,7 +44,7 @@ def main(mdir, ddir):
             row = {'bicubic': evaluate(bicubic, dp)}
             for name, p in sorted(models.items()):
                 m = Model(p)
-                row[name] = evaluate(lambda a: upscale(m, a, PAD), dp) + (1000 * m.secs / m.calls,)
+                row[name] = evaluate(lambda a: upscale(m, a, pad), dp) + (1000 * m.secs / m.calls,)
             results[f'{ds}/{cond}'] = row
     for k, row in results.items():
         print(f'\n## {k}  (PSNR-Y dB, SSIM-Y, ms per tile on this machine)')
@@ -55,4 +55,4 @@ def main(mdir, ddir):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1], sys.argv[2])
+    main(sys.argv[1], sys.argv[2], *(int(a) for a in sys.argv[3:4]))
